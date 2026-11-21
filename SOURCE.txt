@@ -1,0 +1,5 @@
+来源仓库：https://github.com/brendan-duncan/wgsl_reflect
+冻结 commit：16c5553dbb222222dde77281071cbdb16a429994
+许可证：MIT
+导入日期：2026-11-21
+说明：本目录为评测底座，已剥离上游 git 历史，仅保留代码快照。

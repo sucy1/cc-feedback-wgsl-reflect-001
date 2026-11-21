@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "es6",
+    "lib": ["es2016", "es6", "dom"],
+    "noEmitHelpers": false,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "pretty": true,
+    "allowUnreachableCode": true,
+    "allowUnusedLabels": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": true,
+    "strictNullChecks": false,
+    "noFallthroughCasesInSwitch": false,
+    "allowSyntheticDefaultImports": true,
+    "sourceMap": true,
+    "inlineSources": true,
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "declarationDir": "./types",
+    "rootDir": "./src/"
+  },
+  "exclude": ["node_modules"],
+  "files": [
+    "./src/index.ts"
+  ]
+}
