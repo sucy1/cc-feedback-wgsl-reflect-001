@@ -1,5 +1,5 @@
 import { Type, Struct, Alias, Node, Function, Expression, Argument, Member, Attribute } from "../wgsl_ast.js";
-import { FunctionInfo, VariableInfo, AliasInfo, OverrideInfo, StructInfo, TypeInfo, MemberInfo, OutputInfo, InputInfo, EntryFunctions } from "./info.js";
+import { FunctionInfo, VariableInfo, AliasInfo, OverrideInfo, StructInfo, TypeInfo, MemberInfo, OutputInfo, InputInfo, EntryFunctions, BindGroupLayout, BindGroupLayoutOptions } from "./info.js";
 declare class _FunctionResources {
     node: Function;
     resources: VariableInfo[] | null;
@@ -38,6 +38,10 @@ export declare class Reflect {
     _findResource(name: string): VariableInfo | null;
     _markStructsFromAST(type: Type): void;
     _findResources(fn: Node, isEntry: boolean): VariableInfo[];
+    _storageMinBindingSize(v: VariableInfo): number;
+    _textureViewDimension(name: string): string;
+    _textureSampleType(v: VariableInfo): string;
+    getBindGroupLayouts(options?: BindGroupLayoutOptions): BindGroupLayout[];
     getBindGroups(): Array<VariableInfo[]>;
     _getOutputs(type: Type, outputs?: OutputInfo[] | undefined): OutputInfo[];
     _getStructOutputs(struct: Struct, outputs: OutputInfo[]): void;

@@ -427,3 +427,54 @@ export class EntryFunctions {
   fragment: FunctionInfo[] = [];
   compute: FunctionInfo[] = [];
 }
+
+/// The shader stages a bind group entry is visible to, derived from the
+/// resources referenced by each entry point.
+export type BindGroupVisibility = Array<"vertex" | "fragment" | "compute">;
+
+export interface BindGroupLayoutBuffer {
+  type: "uniform" | "storage" | "read-only-storage";
+  hasDynamicOffset: boolean;
+  minBindingSize: number;
+}
+
+export interface BindGroupLayoutTexture {
+  sampleType: string;
+  viewDimension: string;
+  multisampled: boolean;
+}
+
+export interface BindGroupLayoutSampler {
+  type: "filtering" | "comparison";
+}
+
+export interface BindGroupLayoutStorageTexture {
+  access: string;
+  format: string | null;
+  viewDimension: string;
+}
+
+/// One entry of a bind group layout. Exactly one of buffer, texture, sampler,
+/// storageTexture, or externalTexture is set.
+export interface BindGroupLayoutEntry {
+  binding: number;
+  visibility: BindGroupVisibility;
+  buffer?: BindGroupLayoutBuffer;
+  texture?: BindGroupLayoutTexture;
+  sampler?: BindGroupLayoutSampler;
+  storageTexture?: BindGroupLayoutStorageTexture;
+  externalTexture?: object;
+}
+
+/// A dense bind group layout: entries sorted by ascending binding.
+export interface BindGroupLayout {
+  group: number;
+  entries: BindGroupLayoutEntry[];
+}
+
+export interface BindGroupLayoutOptions {
+  /// Uniform buffers that should be marked as having a dynamic offset.
+  /// Each entry must reference an existing uniform buffer binding; anything
+  /// else throws.
+  dynamicBuffers?: Array<{ group: number; binding: number }>;
+}

@@ -151,3 +151,41 @@ export declare class EntryFunctions {
     fragment: FunctionInfo[];
     compute: FunctionInfo[];
 }
+export type BindGroupVisibility = Array<"vertex" | "fragment" | "compute">;
+export interface BindGroupLayoutBuffer {
+    type: "uniform" | "storage" | "read-only-storage";
+    hasDynamicOffset: boolean;
+    minBindingSize: number;
+}
+export interface BindGroupLayoutTexture {
+    sampleType: string;
+    viewDimension: string;
+    multisampled: boolean;
+}
+export interface BindGroupLayoutSampler {
+    type: "filtering" | "comparison";
+}
+export interface BindGroupLayoutStorageTexture {
+    access: string;
+    format: string | null;
+    viewDimension: string;
+}
+export interface BindGroupLayoutEntry {
+    binding: number;
+    visibility: BindGroupVisibility;
+    buffer?: BindGroupLayoutBuffer;
+    texture?: BindGroupLayoutTexture;
+    sampler?: BindGroupLayoutSampler;
+    storageTexture?: BindGroupLayoutStorageTexture;
+    externalTexture?: object;
+}
+export interface BindGroupLayout {
+    group: number;
+    entries: BindGroupLayoutEntry[];
+}
+export interface BindGroupLayoutOptions {
+    dynamicBuffers?: Array<{
+        group: number;
+        binding: number;
+    }>;
+}

@@ -8,7 +8,8 @@ import { Type, Struct, Alias, Override, Var, Node, Function, VariableExpr, Creat
 import { _BlockStart, _BlockEnd } from "../wgsl_ast.js";
 import { FunctionInfo, VariableInfo, AliasInfo, OverrideInfo, PointerInfo,
   StructInfo, TypeInfo, MemberInfo, ArrayInfo, TemplateInfo, BufferInfo, OutputInfo,
-  InputInfo, ArgumentInfo, ResourceType, EntryFunctions } from "./info.js";
+  InputInfo, ArgumentInfo, ResourceType, EntryFunctions, BindGroupLayout,
+  BindGroupLayoutEntry, BindGroupLayoutOptions, BindGroupVisibility } from "./info.js";
 import { isArray } from "../utils/cast.js";
 import { constExprValue, workgroupSizeOf } from "../utils/const_expr.js";
  
@@ -529,6 +530,192 @@ export class Reflect {
       }
     });
     return [...new Map(resources.map(r => [r.name, r])).values()];
+  }
+
+  /// The minimum binding size for a storage buffer: the size of its type,
+  /// except that a runtime-sized array (ArrayInfo with count 0) contributes
+  /// nothing — the size stops at the offset where the array begins.
+  _storageMinBindingSize(v: VariableInfo): number {
+    const type = v.type;
+    if (type instanceof ArrayInfo) {
+      return type.count === 0 ? 0 : type.size;
+    }
+    if (type instanceof StructInfo && type.members.length > 0) {
+      const last = type.members[type.members.length - 1];
+      if (last.type instanceof ArrayInfo && last.type.count === 0) {
+        return last.offset;
+      }
+    }
+    return type.size;
+  }
+
+  _textureViewDimension(name: string): string {
+    if (name.indexOf("2d_array") != -1) {
+      return "2d-array";
+    }
+    if (name.indexOf("cube_array") != -1) {
+      return "cube-array";
+    }
+    if (name.indexOf("1d") != -1) {
+      return "1d";
+    }
+    if (name.indexOf("2d") != -1) {
+      return "2d";
+    }
+    if (name.indexOf("3d") != -1) {
+      return "3d";
+    }
+    if (name.indexOf("cube") != -1) {
+      return "cube";
+    }
+    return "2d";
+  }
+
+  _textureSampleType(v: VariableInfo): string {
+    const name = v.type.name;
+    if (name.indexOf("depth") != -1) {
+      return "depth";
+    }
+    const format = (v.type as TemplateInfo).format;
+    switch (format?.name) {
+      case "i32":
+        return "sint";
+      case "u32":
+        return "uint";
+      default:
+        return "float";
+    }
+  }
+
+  /// Compute the bind group layouts for the shader, one per used group,
+  /// sorted by ascending group, each with entries sorted by ascending
+  /// binding. Visibility is derived from the resources referenced by each
+  /// entry point; a resource no entry point references gets an empty
+  /// visibility array.
+  getBindGroupLayouts(options: BindGroupLayoutOptions = {}): BindGroupLayout[] {
+    const dynamicBuffers = new Set<string>();
+    for (const d of options.dynamicBuffers ?? []) {
+      const resource = this.findResource(d.group, d.binding);
+      if (resource === null) {
+        throw new Error(
+          `dynamicBuffers: no resource at group ${d.group}, binding ${d.binding}`
+        );
+      }
+      if (resource.resourceType !== ResourceType.Uniform) {
+        throw new Error(
+          `dynamicBuffers: resource at group ${d.group}, binding ${d.binding} is not a uniform buffer`
+        );
+      }
+      dynamicBuffers.add(`${d.group}:${d.binding}`);
+    }
+
+    const visibility = new Map<VariableInfo, BindGroupVisibility>();
+    for (const stage of ["vertex", "fragment", "compute"] as const) {
+      for (const fn of this.entry[stage]) {
+        for (const resource of fn.resources) {
+          let v = visibility.get(resource);
+          if (v === undefined) {
+            v = [];
+            visibility.set(resource, v);
+          }
+          if (v.indexOf(stage) == -1) {
+            v.push(stage);
+          }
+        }
+      }
+    }
+    const visibilityOf = (resource: VariableInfo): BindGroupVisibility => {
+      return visibility.get(resource) ?? [];
+    };
+
+    const groups = new Map<number, BindGroupLayoutEntry[]>();
+    const addEntry = (group: number, entry: BindGroupLayoutEntry) => {
+      let entries = groups.get(group);
+      if (entries === undefined) {
+        entries = [];
+        groups.set(group, entries);
+      }
+      entries.push(entry);
+    };
+
+    for (const u of this.uniforms) {
+      addEntry(u.group, {
+        binding: u.binding,
+        visibility: visibilityOf(u),
+        buffer: {
+          type: "uniform",
+          hasDynamicOffset: dynamicBuffers.has(`${u.group}:${u.binding}`),
+          // Uniform address space requires the size to be a multiple of 16.
+          minBindingSize: this._roundUp(16, u.type.size),
+        },
+      });
+    }
+
+    for (const s of this.storage) {
+      if (s.resourceType === ResourceType.StorageTexture) {
+        addEntry(s.group, {
+          binding: s.binding,
+          visibility: visibilityOf(s),
+          storageTexture: {
+            access:
+              s.access === "read"
+                ? "read-only"
+                : s.access === "read_write"
+                ? "read-write"
+                : "write-only",
+            format: (s.type as TemplateInfo).format?.name ?? null,
+            viewDimension: this._textureViewDimension(s.type.name),
+          },
+        });
+        continue;
+      }
+      addEntry(s.group, {
+        binding: s.binding,
+        visibility: visibilityOf(s),
+        buffer: {
+          type: s.access === "read_write" ? "storage" : "read-only-storage",
+          hasDynamicOffset: false,
+          minBindingSize: this._storageMinBindingSize(s),
+        },
+      });
+    }
+
+    for (const t of this.textures) {
+      if (t.type.name === "texture_external") {
+        addEntry(t.group, {
+          binding: t.binding,
+          visibility: visibilityOf(t),
+          externalTexture: {},
+        });
+        continue;
+      }
+      addEntry(t.group, {
+        binding: t.binding,
+        visibility: visibilityOf(t),
+        texture: {
+          sampleType: this._textureSampleType(t),
+          viewDimension: this._textureViewDimension(t.type.name),
+          multisampled: t.type.name.indexOf("multisampled") != -1,
+        },
+      });
+    }
+
+    for (const s of this.samplers) {
+      addEntry(s.group, {
+        binding: s.binding,
+        visibility: visibilityOf(s),
+        sampler: {
+          type: s.type.name === "sampler_comparison" ? "comparison" : "filtering",
+        },
+      });
+    }
+
+    return [...groups.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([group, entries]) => {
+        entries.sort((a, b) => a.binding - b.binding);
+        return { group, entries };
+      });
   }
 
   getBindGroups(): Array<VariableInfo[]> {
